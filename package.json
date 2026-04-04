@@ -6,9 +6,10 @@
   "scripts": {
     "start": "block-basekit-cli start:field",
     "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
     "pack": "block-basekit-cli pack:field",
     "dev": "ts-node --transpile-only src/index.ts",
-    "test": "node test/integration.js"
+    "test": "npm run check"
   },
   "dependencies": {
     "@lark-opdev/block-basekit-server-api": "1.0.6"

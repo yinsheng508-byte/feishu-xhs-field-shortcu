@@ -8,8 +8,8 @@ import {
 
 const { t } = field;
 
-const API_URL = 'https://prenote.limyai.com/api/openapi/publish_note';
-const API_KEY = 'xhs_5bbd21069b386761bdd1e2124f41752426efb84f6f679558c9f9186f68c7f8d7';
+const SHORTCUT_API =
+  'https://publish.liuliangfeng.com/api/integrations/feishu/xhs-field-shortcut/execute';
 
 const i18nMessages = {
   'zh-CN': {
@@ -22,20 +22,20 @@ const i18nMessages = {
     statusLabel: '发布状态',
     successStatus: '✅ 发布成功，请扫码完成发布',
     missingTitle: '❌ 标题不能为空',
-    missingContent: '❌ 正文不能为空',
+    missingContent: '正文可为空',
     missingCover: '❌ 封面图片不能为空',
     networkError: '❌ 网络请求失败，请稍后重试',
-    authError: '❌ API密钥验证失败，请联系管理员',
+    authError: '❌ 请求来源验证失败，请联系管理员',
     validationError: '❌ 参数验证失败：{reason}',
-    insufficientPoints: '❌ 积分不足，请充值后重试',
-    duplicateNote: '❌ 笔记ID已存在',
+    insufficientPoints: '❌ 剩余权益不足，请购买后重试',
+    duplicateNote: '❌ 请求已处理，请勿重复提交',
     serverError: '❌ 服务器错误，请稍后重试',
     unknownError: '❌ 发布失败，请稍后重试',
     // 付费相关提示
     quotaExhausted: '❌ 使用次数已用完，请购买更多次数后继续使用',
-    quotaExhaustedTip: '每次成功发布消耗 0.1 元，请在插件设置中购买套餐',
+    quotaExhaustedTip: '请在飞书插件中心购买更多次数后继续使用',
     paymentRequired: '❌ 此功能需要付费使用',
-    paymentRequiredTip: '首次使用可享受免费试用，之后每次发布 0.1 元',
+    paymentRequiredTip: '请按飞书插件中心购买引导完成开通后再使用',
   },
   'en-US': {
     titleLabel: 'Title',
@@ -47,20 +47,20 @@ const i18nMessages = {
     statusLabel: 'Status',
     successStatus: '✅ Published, scan the code to finish',
     missingTitle: '❌ Title is required',
-    missingContent: '❌ Content is required',
+    missingContent: 'Content may be empty',
     missingCover: '❌ Cover image is required',
     networkError: '❌ Network request failed, please retry later',
-    authError: '❌ API key is invalid, please contact admin',
+    authError: '❌ Request source validation failed, please contact admin',
     validationError: '❌ Validation failed: {reason}',
-    insufficientPoints: '❌ Insufficient credits, please recharge',
-    duplicateNote: '❌ Note ID already exists',
+    insufficientPoints: '❌ No remaining entitlement, please purchase more and retry',
+    duplicateNote: '❌ Request already processed, please do not resubmit',
     serverError: '❌ Server error, please retry later',
     unknownError: '❌ Publish failed, please retry',
     // Payment related messages
     quotaExhausted: '❌ Usage quota exhausted, please purchase more credits',
-    quotaExhaustedTip: 'Each successful publish costs ¥0.1, please purchase a package in plugin settings',
+    quotaExhaustedTip: 'Please purchase more usage in Feishu Plugin Center before continuing',
     paymentRequired: '❌ This feature requires payment',
-    paymentRequiredTip: 'First-time users get a free trial, then ¥0.1 per publish',
+    paymentRequiredTip: 'Please complete the purchase flow in Feishu Plugin Center before using this feature',
   },
   'ja-JP': {
     titleLabel: 'タイトル',
@@ -72,20 +72,20 @@ const i18nMessages = {
     statusLabel: 'ステータス',
     successStatus: '✅ 公開成功、QRをスキャンしてください',
     missingTitle: '❌ タイトルは必須です',
-    missingContent: '❌ 本文は必須です',
+    missingContent: '本文は空でもかまいません',
     missingCover: '❌ カバー画像は必須です',
     networkError: '❌ ネットワークエラーが発生しました。後でもう一度お試しください',
-    authError: '❌ APIキーが無効です。管理者に連絡してください',
+    authError: '❌ リクエスト元の検証に失敗しました。管理者に連絡してください',
     validationError: '❌ パラメータ検証に失敗：{reason}',
-    insufficientPoints: '❌ ポイントが不足しています。チャージしてください',
-    duplicateNote: '❌ ノートIDが既に存在します',
+    insufficientPoints: '❌ 利用可能な権益が不足しています。購入後に再試行してください',
+    duplicateNote: '❌ このリクエストは既に処理されています。再送しないでください',
     serverError: '❌ サーバーエラー。後でもう一度お試しください',
     unknownError: '❌ 公開に失敗しました。再度お試しください',
     // 支払い関連メッセージ
     quotaExhausted: '❌ 使用回数が上限に達しました。追加購入してください',
-    quotaExhaustedTip: '公開1回につき0.1元、プラグイン設定でパッケージを購入してください',
+    quotaExhaustedTip: '続行するには、Feishuプラグインセンターで利用回数を追加購入してください',
     paymentRequired: '❌ この機能は有料です',
-    paymentRequiredTip: '初回は無料トライアル、以降は公開1回0.1元',
+    paymentRequiredTip: '利用前にFeishuプラグインセンターで購入手続きを完了してください',
   },
 };
 
@@ -128,6 +128,91 @@ type ExecuteParams = {
   contentField?: { text?: string }[];
   imagesField?: AttachmentItem[];
   tagsField?: any;
+};
+
+type FeishuContext = {
+  fetch: (url: string, options?: Record<string, any>) => Promise<any>;
+  logID?: string;
+  packID?: string;
+  baseSignature?: string;
+  tenantKey?: string;
+  baseID?: string;
+  tableID?: string;
+  baseOwnerID?: string;
+  timeZone?: string;
+  isNeedPayPack?: boolean;
+  hasQuota?: boolean;
+};
+
+type ShortcutExecuteRequest = {
+  requestId: string;
+  idempotencyKey: string;
+  source: {
+    platform: 'feishu_base';
+    packId: string;
+    baseSignature: string;
+    tenantKey: string;
+    baseId?: string;
+    tableId?: string;
+    baseOwnerId?: string;
+    timeZone?: string;
+  };
+  billing: {
+    isNeedPayPack: boolean;
+    hasQuota: boolean;
+  };
+  note: {
+    title: string;
+    content: string;
+    tags: string[];
+    images: Array<{
+      name: string;
+      tmpUrl: string;
+      size?: number;
+      mime?: string;
+    }>;
+  };
+};
+
+type ShortcutSuccessResponse = {
+  success: true;
+  data?: {
+    taskId?: string;
+    bizId?: string;
+    scene?: string;
+    qrCodeUrl?: string;
+    status?: 'PENDING' | 'PUBLISHED';
+    createdAt?: string;
+  };
+};
+
+type ShortcutErrorCode =
+  | 'INVALID_INPUT'
+  | 'UNAUTHORIZED_SOURCE'
+  | 'PAYMENT_REQUIRED'
+  | 'QUOTA_EXHAUSTED'
+  | 'RATE_LIMITED'
+  | 'UPSTREAM_TEMPORARY_ERROR'
+  | 'INTERNAL_ERROR';
+
+type ShortcutErrorResponse = {
+  success: false;
+  error?: {
+    code?: ShortcutErrorCode | string;
+    message?: string;
+  };
+};
+
+type ShortcutExecuteResponse = ShortcutSuccessResponse | ShortcutErrorResponse;
+
+const ERROR_CODE_MAP: Record<ShortcutErrorCode, FieldCode> = {
+  INVALID_INPUT: FieldCode.InvalidArgument,
+  UNAUTHORIZED_SOURCE: FieldCode.AuthorizationError,
+  PAYMENT_REQUIRED: FieldCode.PayError,
+  QUOTA_EXHAUSTED: FieldCode.QuotaExhausted,
+  RATE_LIMITED: FieldCode.RateLimit,
+  UPSTREAM_TEMPORARY_ERROR: FieldCode.Error,
+  INTERNAL_ERROR: FieldCode.Error,
 };
 
 const debugLog = (context: any, payload: any) => {
@@ -305,14 +390,14 @@ export const __test__ = {
   messageOf,
 };
 
-basekit.addDomainList(['prenote.limyai.com']);
+basekit.addDomainList(['publish.liuliangfeng.com']);
 
 /**
  * 付费状态检查结果
  */
 type PaymentCheckResult = {
   passed: boolean;
-  reason?: 'quota_exhausted' | 'payment_required';
+  reason?: 'payment_required';
 };
 
 /**
@@ -331,16 +416,73 @@ const checkPaymentStatus = (context: any): PaymentCheckResult => {
 
   // 如果是付费插件但用户没有剩余额度
   if (!context.hasQuota) {
-    return { passed: false, reason: 'quota_exhausted' };
+    return { passed: false, reason: 'payment_required' };
   }
 
   // 付费检查通过
   return { passed: true };
 };
 
+const normalizeBackendErrorCode = (
+  value: unknown
+): ShortcutErrorCode | undefined => {
+  switch (value) {
+    case 'INVALID_INPUT':
+    case 'UNAUTHORIZED_SOURCE':
+    case 'PAYMENT_REQUIRED':
+    case 'QUOTA_EXHAUSTED':
+    case 'RATE_LIMITED':
+    case 'UPSTREAM_TEMPORARY_ERROR':
+    case 'INTERNAL_ERROR':
+      return value;
+    default:
+      return undefined;
+  }
+};
+
+const buildShortcutRequest = (
+  formItemParams: ExecuteParams,
+  context: FeishuContext,
+  title: string,
+  content: string,
+  sortedImages: AttachmentItem[],
+  tags: string[]
+): ShortcutExecuteRequest => {
+  const requestId = context.logID || `xhs-${Date.now()}`;
+  return {
+    requestId,
+    idempotencyKey: `xhs-${requestId}`,
+    source: {
+      platform: 'feishu_base',
+      packId: context.packID || '',
+      baseSignature: context.baseSignature || '',
+      tenantKey: context.tenantKey || '',
+      baseId: context.baseID,
+      tableId: context.tableID,
+      baseOwnerId: context.baseOwnerID,
+      timeZone: context.timeZone || 'Asia/Shanghai',
+    },
+    billing: {
+      isNeedPayPack: Boolean(context.isNeedPayPack),
+      hasQuota: Boolean(context.hasQuota),
+    },
+    note: {
+      title,
+      content,
+      tags,
+      images: sortedImages.map((item) => ({
+        name: item?.name || '',
+        tmpUrl: item?.tmp_url || '',
+        size: item?.size,
+        mime: item?.type,
+      })),
+    },
+  };
+};
+
 export const executeHandler = async (
   formItemParams: ExecuteParams,
-  context: any
+  context: FeishuContext
 ) => {
   // ==================== 第1步：付费状态检查 ====================
   const paymentCheck = checkPaymentStatus(context);
@@ -356,16 +498,10 @@ export const executeHandler = async (
 
   // 如果付费检查不通过，返回相应错误
   if (!paymentCheck.passed) {
-    if (paymentCheck.reason === 'quota_exhausted') {
-      debugLog(context, { step: 'blocked', reason: 'quota_exhausted' });
-      // 返回 QuotaExhausted 错误码，飞书会显示额度不足提示
-      return {
-        code: FieldCode.QuotaExhausted,
-      };
-    }
-
-    // 其他付费错误
-    debugLog(context, { step: 'blocked', reason: 'payment_required' });
+    debugLog(context, {
+      step: 'blocked',
+      reason: paymentCheck.reason || 'payment_required',
+    });
     return {
       code: FieldCode.PayError,
     };
@@ -380,11 +516,6 @@ export const executeHandler = async (
     ? formItemParams.imagesField.filter(Boolean)
     : [];
   const sortedImages = sortAttachments(attachments);
-  const coverImage = sortedImages[0]?.tmp_url || '';
-  const bodyImages = sortedImages
-    .slice(1)
-    .map((item) => item?.tmp_url || '')
-    .filter(Boolean);
   const tags = parseTags(formItemParams.tagsField);
 
   debugLog(context, {
@@ -399,49 +530,43 @@ export const executeHandler = async (
     debugLog(context, { step: 'error', reason: 'missing_title' });
     return buildAttachmentResult({ code: FieldCode.Error });
   }
-  if (!content) {
-    debugLog(context, { step: 'error', reason: 'missing_content' });
-    return buildAttachmentResult({ code: FieldCode.Error });
-  }
-  if (!coverImage) {
-    debugLog(context, { step: 'error', reason: 'missing_cover' });
+  if (!sortedImages.length) {
+    debugLog(context, { step: 'error', reason: 'missing_images' });
     return buildAttachmentResult({ code: FieldCode.Error });
   }
 
-  const idempotencyKey = `${context?.logID || 'xhs'}-${Date.now()}`;
-  const payload: Record<string, any> = {
+  const requestBody = buildShortcutRequest(
+    formItemParams,
+    context,
     title,
     content,
-    coverImage,
-  };
-  if (bodyImages.length) {
-    payload.images = bodyImages;
-  }
-  if (tags.length) {
-    payload.tags = tags;
-  }
+    sortedImages,
+    tags
+  );
 
   debugLog(context, {
     step: 'request',
-    payloadPreview: JSON.stringify(payload).slice(0, 300),
+    requestId: requestBody.requestId,
+    idempotencyKey: requestBody.idempotencyKey,
+    imagesCount: requestBody.note.images.length,
+    tagsCount: requestBody.note.tags.length,
   });
 
   try {
-    const response = await (context as any).fetch(API_URL, {
+    const response = await context.fetch(SHORTCUT_API, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY,
-        'Idempotency-Key': idempotencyKey,
+        'X-Idempotency-Key': requestBody.idempotencyKey,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(requestBody),
     });
 
     const responseText = await response.text();
-    let responseJson: any;
+    let responseJson: ShortcutExecuteResponse | null = null;
     try {
-      responseJson = JSON.parse(responseText);
-    } catch (err) {
+      responseJson = JSON.parse(responseText) as ShortcutExecuteResponse;
+    } catch (_err) {
       debugLog(context, { step: 'parse_error', responseText });
       return buildAttachmentResult({ code: FieldCode.Error });
     }
@@ -449,28 +574,44 @@ export const executeHandler = async (
     debugLog(context, {
       step: 'response',
       status: response.status,
-      bodyPreview: responseText.slice(0, 500),
+      success: responseJson?.success,
+      errorCode:
+        responseJson && responseJson.success === false && responseJson.error
+          ? responseJson.error.code
+          : undefined,
     });
 
-    if (!response.ok || responseJson?.success === false) {
-      const errorType =
-        responseJson?.error_type ||
-        responseJson?.error ||
-        responseJson?.errorCode ||
-        responseJson?.error_code ||
-        responseJson?.code;
-      debugLog(context, { step: 'api_error', errorType, status: response.status });
-      return buildAttachmentResult({ code: FieldCode.Error });
+    if (!response.ok || !responseJson || responseJson.success === false) {
+      const backendCode = normalizeBackendErrorCode(
+        responseJson && responseJson.success === false && responseJson.error
+          ? responseJson.error.code
+          : undefined
+      );
+      const mappedCode = backendCode
+        ? ERROR_CODE_MAP[backendCode]
+        : FieldCode.Error;
+      debugLog(context, {
+        step: 'api_error',
+        backendCode,
+        mappedCode,
+        status: response.status,
+      });
+      return buildAttachmentResult({ code: mappedCode });
     }
 
-    const data = responseJson?.data || {};
-    const qrUrl = data.xiaohongshu_qr_image_url || '';
+    const data = responseJson.data || {};
+    const qrUrl = data.qrCodeUrl || '';
     if (!qrUrl) {
       debugLog(context, { step: 'error', reason: 'no_qr_url' });
       return buildAttachmentResult({ code: FieldCode.Error });
     }
 
-    debugLog(context, { step: 'success', qrUrl });
+    debugLog(context, {
+      step: 'success',
+      taskId: data.taskId,
+      status: data.status,
+      qrUrl,
+    });
     return buildAttachmentResult({ code: FieldCode.Success, qrCodeUrl: qrUrl });
   } catch (error) {
     debugLog(context, { step: 'network_error', error: String(error) });
@@ -499,7 +640,6 @@ basekit.addField({
       props: {
         supportType: [FieldType.Text],
       },
-      validator: { required: true },
     },
     {
       key: 'imagesField',
