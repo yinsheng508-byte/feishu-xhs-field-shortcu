@@ -8,8 +8,13 @@ import {
 
 const { t } = field;
 
-const SHORTCUT_API =
-  'https://publish.liuliangfeng.com/api/integrations/feishu/xhs-field-shortcut/execute';
+const API_BASE = 'https://publish.liuliangfeng.com/api';
+const SHORTCUT_API = `${API_BASE}/integrations/feishu/xhs-field-shortcut/execute`;
+
+const EXTERNAL_AUTH_CONFIG = {
+  apiKey: 'lf_publish_api_key_20260215',
+  strict: true,
+};
 
 const i18nMessages = {
   'zh-CN': {
@@ -197,6 +202,8 @@ type ShortcutErrorCode =
 
 type ShortcutErrorResponse = {
   success: false;
+  code?: string;
+  message?: string;
   error?: {
     code?: ShortcutErrorCode | string;
     message?: string;
@@ -227,6 +234,31 @@ const debugLog = (context: any, payload: any) => {
     ),
     '\n'
   );
+};
+
+const buildExternalAuthHeaders = (): Record<string, string> => {
+  if (!EXTERNAL_AUTH_CONFIG.strict || !EXTERNAL_AUTH_CONFIG.apiKey) {
+    return {};
+  }
+  return {
+    'X-API-Key': EXTERNAL_AUTH_CONFIG.apiKey,
+  };
+};
+
+const parseJsonResponse = async <T>(response: any) => {
+  const text = await response.text();
+  let json: T | null = null;
+  try {
+    json = text ? (JSON.parse(text) as T) : null;
+  } catch (_err) {
+    json = null;
+  }
+  return {
+    ok: Boolean(response.ok),
+    status: Number(response.status || 0),
+    text,
+    json,
+  };
 };
 
 const extractPlainText = (value: any): string => {
@@ -390,7 +422,9 @@ export const __test__ = {
   messageOf,
 };
 
-basekit.addDomainList(['publish.liuliangfeng.com']);
+basekit.addDomainList([
+  'publish.liuliangfeng.com',
+]);
 
 /**
  * 付费状态检查结果
@@ -428,13 +462,27 @@ const normalizeBackendErrorCode = (
 ): ShortcutErrorCode | undefined => {
   switch (value) {
     case 'INVALID_INPUT':
+    case 'INVALID_REQUEST':
+    case 'INVALID_MEDIA':
+    case 'INVALID_MEDIA_URL':
+    case 'INVALID_CONTENT_TYPE':
+    case 'INVALID_MEDIA_HEADER':
+    case 'INVALID_TITLE':
+    case 'INVALID_CONTENT':
+      return 'INVALID_INPUT';
     case 'UNAUTHORIZED_SOURCE':
+    case 'UNAUTHORIZED':
+      return 'UNAUTHORIZED_SOURCE';
     case 'PAYMENT_REQUIRED':
+      return 'PAYMENT_REQUIRED';
     case 'QUOTA_EXHAUSTED':
+      return 'QUOTA_EXHAUSTED';
     case 'RATE_LIMITED':
+      return 'RATE_LIMITED';
     case 'UPSTREAM_TEMPORARY_ERROR':
+      return 'UPSTREAM_TEMPORARY_ERROR';
     case 'INTERNAL_ERROR':
-      return value;
+      return 'INTERNAL_ERROR';
     default:
       return undefined;
   }
@@ -558,43 +606,56 @@ export const executeHandler = async (
       headers: {
         'Content-Type': 'application/json',
         'X-Idempotency-Key': requestBody.idempotencyKey,
+        ...buildExternalAuthHeaders(),
       },
       body: JSON.stringify(requestBody),
     });
 
-    const responseText = await response.text();
-    let responseJson: ShortcutExecuteResponse | null = null;
-    try {
-      responseJson = JSON.parse(responseText) as ShortcutExecuteResponse;
-    } catch (_err) {
-      debugLog(context, { step: 'parse_error', responseText });
-      return buildAttachmentResult({ code: FieldCode.Error });
-    }
+    const parsedResponse = await parseJsonResponse<ShortcutExecuteResponse>(
+      response
+    );
+    const responseJson = parsedResponse.json;
 
     debugLog(context, {
       step: 'response',
-      status: response.status,
+      status: parsedResponse.status,
       success: responseJson?.success,
       errorCode:
-        responseJson && responseJson.success === false && responseJson.error
-          ? responseJson.error.code
+        responseJson && responseJson.success === false
+          ? responseJson.error?.code || responseJson.code
           : undefined,
     });
 
-    if (!response.ok || !responseJson || responseJson.success === false) {
+    if (!responseJson) {
+      debugLog(context, {
+        step: 'parse_error',
+        status: parsedResponse.status,
+        responseText: parsedResponse.text,
+      });
+      return buildAttachmentResult({ code: FieldCode.Error });
+    }
+
+    if (!parsedResponse.ok || responseJson.success === false) {
       const backendCode = normalizeBackendErrorCode(
-        responseJson && responseJson.success === false && responseJson.error
-          ? responseJson.error.code
+        responseJson && responseJson.success === false
+          ? responseJson.error?.code || responseJson.code
           : undefined
       );
-      const mappedCode = backendCode
-        ? ERROR_CODE_MAP[backendCode]
-        : FieldCode.Error;
+      const mappedCode =
+        parsedResponse.status === 401 || parsedResponse.status === 403
+          ? FieldCode.AuthorizationError
+          : parsedResponse.status === 402
+            ? FieldCode.PayError
+            : parsedResponse.status === 429
+              ? FieldCode.RateLimit
+              : backendCode
+                ? ERROR_CODE_MAP[backendCode]
+                : FieldCode.Error;
       debugLog(context, {
         step: 'api_error',
         backendCode,
         mappedCode,
-        status: response.status,
+        status: parsedResponse.status,
       });
       return buildAttachmentResult({ code: mappedCode });
     }
