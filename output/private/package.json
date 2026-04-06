@@ -1,0 +1,22 @@
+{
+  "name": "xhs-field-shortcut",
+  "version": "1.0.0",
+  "description": "Feishu Base field shortcut for Xiaohongshu publish QR",
+  "main": "output/private/build/index.js",
+  "scripts": {
+    "start": "block-basekit-cli start:field",
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "pack": "block-basekit-cli pack:field",
+    "dev": "ts-node --transpile-only src/index.ts",
+    "test": "npm run check"
+  },
+  "dependencies": {
+    "@lark-opdev/block-basekit-server-api": "1.0.6"
+  },
+  "devDependencies": {
+    "@lark-opdev/block-basekit-cli": "1.0.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

@@ -406,11 +406,8 @@ const buildAttachmentResult = (
       ],
     };
   }
-  // 错误时返回空数组
-  return {
-    code,
-    data: [],
-  };
+  // 错误时不带 data 字段，避免飞书平台 transform cell value fail
+  return { code };
 };
 
 export const __test__ = {
