@@ -89,76 +89,10 @@ async function main() {
     },
     {
       fetch: async (url: string, options?: Record<string, any>) => {
-        if (url === 'https://tmp.example.com/video.mp4') {
-          return {
-            ok: true,
-            status: 200,
-            headers: {
-              get: (key: string) =>
-                key.toLowerCase() === 'content-type' ? 'video/mp4' : '',
-            },
-            arrayBuffer: async () => Buffer.from('video-bytes'),
-          };
-        }
-
-        if (url === 'https://tmp.example.com/cover.jpg') {
-          return {
-            ok: true,
-            status: 200,
-            headers: {
-              get: (key: string) =>
-                key.toLowerCase() === 'content-type' ? 'image/jpeg' : '',
-            },
-            arrayBuffer: async () => Buffer.from('cover-bytes'),
-          };
-        }
-
-        if (url === 'https://publish.liuliangfeng.com/api/media/upload-token') {
-          const body = JSON.parse(String(options?.body || '{}'));
-          const mediaId = body.contentType === 'video/mp4' ? 'm_video_001' : 'm_cover_001';
-          return {
-            ok: true,
-            status: 200,
-            text: async () =>
-              JSON.stringify({
-                success: true,
-                data: {
-                  mediaId,
-                  uploadUrl: `https://bucket.myqcloud.com/${mediaId}`,
-                  headers: {
-                    'Content-Type': body.contentType,
-                    'Content-Disposition': 'inline',
-                  },
-                },
-              }),
-          };
-        }
-
-        if (url.startsWith('https://bucket.myqcloud.com/')) {
-          return {
-            ok: true,
-            status: 200,
-          };
-        }
-
-        if (url === 'https://publish.liuliangfeng.com/api/media/confirm') {
-          const body = JSON.parse(String(options?.body || '{}'));
-          return {
-            ok: true,
-            status: 200,
-            text: async () =>
-              JSON.stringify({
-                success: true,
-                data: {
-                  mediaId: body.mediaId,
-                  status: 'UPLOADED',
-                  validationStatus: body.mediaId === 'm_video_001' ? 'PASSED' : 'PASSED',
-                },
-              }),
-          };
-        }
-
-        if (url === 'https://publish.liuliangfeng.com/api/publishTasks') {
+        if (
+          url ===
+          'https://publish.liuliangfeng.com/api/integrations/feishu/xhs-field-shortcut/execute'
+        ) {
           receivedPublishTaskBody = JSON.parse(String(options?.body || '{}'));
           return {
             ok: true,
@@ -188,13 +122,24 @@ async function main() {
   );
 
   assert.equal(executeVideoResult.code, FieldCode.Success);
-  assert.deepEqual(receivedPublishTaskBody.media, {
+  assert.deepEqual(receivedPublishTaskBody.note.media, {
     type: 'video',
-    mediaId: 'm_video_001',
-    coverMediaId: 'm_cover_001',
+    items: [
+      {
+        name: 'video.mp4',
+        tmpUrl: 'https://tmp.example.com/video.mp4',
+        mime: 'video/mp4',
+      },
+    ],
+    cover: {
+      name: 'cover.jpg',
+      tmpUrl: 'https://tmp.example.com/cover.jpg',
+      mime: 'image/jpeg',
+    },
   });
 
-  assert.equal(receivedPublishTaskBody.callbackContext.requestId, 'log_001');
+  assert.equal(receivedPublishTaskBody.requestId, 'log_001');
+  assert.equal(receivedPublishTaskBody.idempotencyKey, 'xhs-log_001');
 
   const incompatibleVideoResult = await executeHandler(
     {
@@ -205,45 +150,10 @@ async function main() {
     },
     {
       fetch: async (url: string, options?: Record<string, any>) => {
-        if (url === 'https://tmp.example.com/video.mp4') {
-          return {
-            ok: true,
-            status: 200,
-            headers: {
-              get: (key: string) =>
-                key.toLowerCase() === 'content-type' ? 'video/mp4' : '',
-            },
-            arrayBuffer: async () => Buffer.from('video-bytes'),
-          };
-        }
-
-        if (url === 'https://publish.liuliangfeng.com/api/media/upload-token') {
-          return {
-            ok: true,
-            status: 200,
-            text: async () =>
-              JSON.stringify({
-                success: true,
-                data: {
-                  mediaId: 'm_video_bad',
-                  uploadUrl: 'https://bucket.myqcloud.com/m_video_bad',
-                  headers: {
-                    'Content-Type': 'video/mp4',
-                    'Content-Disposition': 'inline',
-                  },
-                },
-              }),
-          };
-        }
-
-        if (url === 'https://bucket.myqcloud.com/m_video_bad') {
-          return {
-            ok: true,
-            status: 200,
-          };
-        }
-
-        if (url === 'https://publish.liuliangfeng.com/api/media/confirm') {
+        if (
+          url ===
+          'https://publish.liuliangfeng.com/api/integrations/feishu/xhs-field-shortcut/execute'
+        ) {
           return {
             ok: false,
             status: 400,
@@ -299,45 +209,10 @@ async function main() {
     },
     {
       fetch: async (url: string, options?: Record<string, any>) => {
-        if (url === 'https://tmp.example.com/video.mp4') {
-          return {
-            ok: true,
-            status: 200,
-            headers: {
-              get: (key: string) =>
-                key.toLowerCase() === 'content-type' ? 'video/mp4' : '',
-            },
-            arrayBuffer: async () => Buffer.from('video-bytes'),
-          };
-        }
-
-        if (url === 'https://publish.liuliangfeng.com/api/media/upload-token') {
-          return {
-            ok: true,
-            status: 200,
-            text: async () =>
-              JSON.stringify({
-                success: true,
-                data: {
-                  mediaId: 'm_video_pending',
-                  uploadUrl: 'https://bucket.myqcloud.com/m_video_pending',
-                  headers: {
-                    'Content-Type': 'video/mp4',
-                    'Content-Disposition': 'inline',
-                  },
-                },
-              }),
-          };
-        }
-
-        if (url === 'https://bucket.myqcloud.com/m_video_pending') {
-          return {
-            ok: true,
-            status: 200,
-          };
-        }
-
-        if (url === 'https://publish.liuliangfeng.com/api/media/confirm') {
+        if (
+          url ===
+          'https://publish.liuliangfeng.com/api/integrations/feishu/xhs-field-shortcut/execute'
+        ) {
           return {
             ok: false,
             status: 409,

@@ -4,9 +4,7 @@ exports.__test__ = exports.executeHandler = void 0;
 const block_basekit_server_api_1 = require("@lark-opdev/block-basekit-server-api");
 const { t } = block_basekit_server_api_1.field;
 const API_BASE = 'https://publish.liuliangfeng.com/api';
-const MEDIA_UPLOAD_TOKEN_API = `${API_BASE}/media/upload-token`;
-const MEDIA_CONFIRM_API = `${API_BASE}/media/confirm`;
-const PUBLISH_TASK_API = `${API_BASE}/publishTasks`;
+const FEISHU_SHORTCUT_EXECUTE_API = `${API_BASE}/integrations/feishu/xhs-field-shortcut/execute`;
 const EXTERNAL_AUTH_CONFIG = {
     apiKey: 'lf_publish_api_key_20260215',
     strict: true,
@@ -503,20 +501,14 @@ const buildRequestContextMeta = (context) => {
         },
     };
 };
-const buildPublishTaskRequest = (requestMeta, title, content, tags, media) => {
+const buildShortcutExecuteRequest = (requestMeta, title, content, tags, media) => {
     return {
-        title,
-        content,
-        tags,
-        media,
-        callbackContext: {
-            bizId: requestMeta.idempotencyKey,
-            requestId: requestMeta.requestId,
-            source: 'feishu_field_shortcut',
-            packId: requestMeta.source.packId,
-            tenantKey: requestMeta.source.tenantKey,
-            baseId: requestMeta.source.baseId,
-            tableId: requestMeta.source.tableId,
+        ...requestMeta,
+        note: {
+            title,
+            content,
+            tags,
+            media,
         },
     };
 };
@@ -546,66 +538,6 @@ const requestBackendApi = async (context, url, options) => {
         });
     }
     return (responseJson.data || {});
-};
-const downloadTmpAsset = async (context, asset) => {
-    const response = await context.fetch(asset.tmpUrl, {
-        method: 'GET',
-    });
-    if (!response.ok) {
-        throw new Error(`tmp asset download failed with status ${response.status || 0}`);
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    const bytes = Buffer.from(arrayBuffer);
-    if (!bytes.length) {
-        throw new Error('tmp asset is empty');
-    }
-    const responseContentType = normalizeMime(typeof response.headers?.get === 'function'
-        ? response.headers.get('content-type')
-        : '');
-    return {
-        bytes,
-        contentType: normalizeMime(asset.mime || responseContentType || 'application/octet-stream'),
-    };
-};
-const createUploadToken = async (context, asset, contentType) => {
-    return requestBackendApi(context, MEDIA_UPLOAD_TOKEN_API, {
-        method: 'POST',
-        headers: buildApiHeaders({
-            'Content-Type': 'application/json',
-        }),
-        body: JSON.stringify({
-            filename: asset.name || 'file',
-            contentType,
-        }),
-    });
-};
-const uploadToSignedUrl = async (context, uploadUrl, headers, bytes) => {
-    const response = await context.fetch(uploadUrl, {
-        method: 'PUT',
-        headers,
-        body: bytes,
-    });
-    if (!response.ok) {
-        throw new Error(`signed upload failed with status ${response.status || 0}`);
-    }
-};
-const confirmUploadedMedia = async (context, mediaId) => {
-    return requestBackendApi(context, MEDIA_CONFIRM_API, {
-        method: 'POST',
-        headers: buildApiHeaders({
-            'Content-Type': 'application/json',
-        }),
-        body: JSON.stringify({ mediaId }),
-    });
-};
-const uploadAndConfirmAsset = async (context, asset) => {
-    const downloaded = await downloadTmpAsset(context, asset);
-    const uploadToken = await createUploadToken(context, asset, downloaded.contentType);
-    if (!uploadToken.mediaId || !uploadToken.uploadUrl || !uploadToken.headers) {
-        throw new Error('upload-token response is incomplete');
-    }
-    await uploadToSignedUrl(context, uploadToken.uploadUrl, uploadToken.headers, downloaded.bytes);
-    return confirmUploadedMedia(context, uploadToken.mediaId);
 };
 const mapValidationReasonToFieldCode = () => {
     return block_basekit_server_api_1.FieldCode.InvalidArgument;
@@ -686,57 +618,37 @@ const executeHandler = async (formItemParams, context) => {
         tagsCount: tags.length,
     });
     try {
-        debugLog(context, {
-            step: 'upload_started',
-            mediaType: selectedMedia.media.type,
-        });
-        let publishMedia;
-        if (selectedMedia.media.type === 'image') {
-            const uploadedAssets = [];
-            for (const item of selectedMedia.media.items) {
-                uploadedAssets.push(await uploadAndConfirmAsset(context, toShortcutMediaItem(item)));
-            }
-            const mediaIds = uploadedAssets
-                .map((item) => item.mediaId || '')
-                .filter(Boolean);
-            publishMedia = {
+        const executeRequest = buildShortcutExecuteRequest(requestMeta, title, content, tags, selectedMedia.media.type === 'image'
+            ? {
                 type: 'image',
-                mediaIds,
-            };
-        }
-        else {
-            const uploadedVideo = await uploadAndConfirmAsset(context, toShortcutMediaItem(selectedMedia.media.items[0]));
-            const uploadedCover = selectedMedia.media.cover
-                ? await uploadAndConfirmAsset(context, toShortcutMediaItem(selectedMedia.media.cover))
-                : null;
-            if (!uploadedVideo.mediaId) {
-                throw new Error('confirmed video mediaId is missing');
+                items: selectedMedia.media.items.map((item) => toShortcutMediaItem(item)),
             }
-            publishMedia = {
+            : {
                 type: 'video',
-                mediaId: uploadedVideo.mediaId,
-                ...(uploadedCover?.mediaId
-                    ? { coverMediaId: uploadedCover.mediaId }
+                items: [toShortcutMediaItem(selectedMedia.media.items[0])],
+                ...(selectedMedia.media.cover
+                    ? {
+                        cover: toShortcutMediaItem(selectedMedia.media.cover),
+                    }
                     : {}),
-            };
-        }
+            });
         debugLog(context, {
-            step: 'upload_succeeded',
-            mediaType: publishMedia.type,
-            imageCount: publishMedia.type === 'image' ? publishMedia.mediaIds.length : 0,
-            hasCover: publishMedia.type === 'video' && Boolean(publishMedia.coverMediaId),
+            step: 'execute_started',
+            mediaType: executeRequest.note.media.type,
+            itemCount: executeRequest.note.media.items.length,
+            hasCover: executeRequest.note.media.type === 'video' &&
+                Boolean(executeRequest.note.media.cover),
         });
-        const publishRequest = buildPublishTaskRequest(requestMeta, title, content, tags, publishMedia);
-        const data = await requestBackendApi(context, PUBLISH_TASK_API, {
+        const data = await requestBackendApi(context, FEISHU_SHORTCUT_EXECUTE_API, {
             method: 'POST',
             headers: buildApiHeaders({
                 'Content-Type': 'application/json',
                 'X-Idempotency-Key': requestMeta.idempotencyKey,
             }),
-            body: JSON.stringify(publishRequest),
+            body: JSON.stringify(executeRequest),
         });
         debugLog(context, {
-            step: 'publish_task_succeeded',
+            step: 'execute_succeeded',
             taskId: data.taskId,
             status: data.status,
             qrUrl: data.qrCodeUrl,
