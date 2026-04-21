@@ -4,17 +4,16 @@ import {
   field,
   FieldComponent,
   FieldCode,
+  AuthorizationType,
 } from '@lark-opdev/block-basekit-server-api';
 
 const { t } = field;
 
 const API_BASE = 'https://publish.liuliangfeng.com/api';
 const FEISHU_SHORTCUT_EXECUTE_API = `${API_BASE}/integrations/feishu/xhs-field-shortcut/execute`;
+const DEBUG_BACKEND_AUTH_ID = 'backend_debug_auth';
 
-const EXTERNAL_AUTH_CONFIG = {
-  apiKey: 'lf_publish_api_key_20260215',
-  strict: true,
-};
+// 来源鉴权由后端通过 baseSignature + packId 验签完成，前端无需附加 API Key。
 
 const IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
@@ -40,10 +39,10 @@ const VIDEO_FILE_EXTENSIONS = new Set([
 
 const i18nMessages = {
   'zh-CN': {
-    titleLabel: '标题字段',
-    contentLabel: '正文字段',
-    mediaLabel: '图片/视频字段',
-    tagsLabel: '标签字段',
+    titleLabel: '标题',
+    contentLabel: '正文',
+    mediaLabel: '图片/视频',
+    tagsLabel: '标签',
     qrCodeLabel: '发布二维码',
     publishUrlLabel: '发布链接',
     statusLabel: '发布状态',
@@ -146,7 +145,11 @@ type ExecuteParams = {
 };
 
 type FeishuContext = {
-  fetch: (url: string, options?: Record<string, any>) => Promise<any>;
+  fetch: (
+    url: string,
+    options?: Record<string, any>,
+    authorizationId?: string
+  ) => Promise<any>;
   logID?: string;
   packID?: string;
   baseSignature?: string;
@@ -347,13 +350,17 @@ const debugLog = (context: any, payload: any) => {
   );
 };
 
+const isDebugBackendAuthEnabled = (): boolean => {
+  return process.env.FIELD_DEBUG_AUTH === '1';
+};
+
+const getDebugBackendAuthorizationId = (): string | undefined => {
+  return isDebugBackendAuthEnabled() ? DEBUG_BACKEND_AUTH_ID : undefined;
+};
+
 const buildExternalAuthHeaders = (): Record<string, string> => {
-  if (!EXTERNAL_AUTH_CONFIG.strict || !EXTERNAL_AUTH_CONFIG.apiKey) {
-    return {};
-  }
-  return {
-    'X-API-Key': EXTERNAL_AUTH_CONFIG.apiKey,
-  };
+  // 不再附加静态 API Key——后端通过 source.baseSignature / source.packId 验证请求来源。
+  return {};
 };
 
 const parseJsonResponse = async <T>(response: any) => {
@@ -762,7 +769,10 @@ const requestBackendApi = async <T>(
   url: string,
   options: Record<string, any>
 ): Promise<T> => {
-  const response = await context.fetch(url, options);
+  const authorizationId = getDebugBackendAuthorizationId();
+  const response = authorizationId
+    ? await context.fetch(url, options, authorizationId)
+    : await context.fetch(url, options);
   const parsed = await parseJsonResponse<ApiResponse<T>>(response);
   const responseJson = parsed.json;
 
@@ -985,6 +995,7 @@ export const __test__ = {
   normalizeSelectedMedia,
   getLocale,
   messageOf,
+  getDebugBackendAuthorizationId,
 };
 
 basekit.addDomainList([
@@ -996,7 +1007,7 @@ basekit.addDomainList([
   'myqcloud.com',
 ]);
 
-basekit.addField({
+const fieldDefinition: any = {
   i18n: {
     messages: i18nMessages,
   },
@@ -1040,6 +1051,25 @@ basekit.addField({
     type: FieldType.Attachment,
   },
   execute: executeHandler,
-});
+};
+
+if (isDebugBackendAuthEnabled()) {
+  fieldDefinition.authorizations = [
+    {
+      id: DEBUG_BACKEND_AUTH_ID,
+      platform: 'base',
+      type: AuthorizationType.HeaderBearerToken,
+      required: false,
+      instructionsUrl: 'https://publish.liuliangfeng.com',
+      label: '后端调试令牌',
+      icon: {
+        light: '',
+        dark: '',
+      },
+    },
+  ];
+}
+
+basekit.addField(fieldDefinition);
 
 export default basekit;

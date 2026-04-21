@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { FieldCode } from '@lark-opdev/block-basekit-server-api';
 import { __test__, executeHandler } from '../src/index';
 
-const { detectAttachmentKind, normalizeSelectedMedia } = __test__;
+const { detectAttachmentKind, normalizeSelectedMedia, getDebugBackendAuthorizationId } = __test__;
 
 async function main() {
   assert.equal(
@@ -234,6 +234,62 @@ async function main() {
   );
 
   assert.equal(unconfirmedMediaResult.code, FieldCode.InvalidArgument);
+
+  let receivedAuthorizationId: string | undefined;
+  process.env.FIELD_DEBUG_AUTH = '1';
+  try {
+    const debugResult = await executeHandler(
+      {
+        titleField: [{ text: '调试授权标题' }],
+        mediaField: [
+          {
+            name: 'cover.jpg',
+            tmp_url: 'https://tmp.example.com/cover.jpg',
+            type: 'image/jpeg',
+          },
+        ],
+      },
+      {
+        fetch: async (
+          url: string,
+          options?: Record<string, any>,
+          authorizationId?: string
+        ) => {
+          receivedAuthorizationId = authorizationId;
+          if (
+            url ===
+            'https://publish.liuliangfeng.com/api/integrations/feishu/xhs-field-shortcut/execute'
+          ) {
+            return {
+              ok: true,
+              status: 200,
+              text: async () =>
+                JSON.stringify({
+                  success: true,
+                  data: {
+                    taskId: 'pt_debug_auth_001',
+                    scene: 'scene_debug_auth_001',
+                    qrCodeUrl: 'https://cdn.example.com/qrcode-debug.png',
+                    status: 'PENDING',
+                  },
+                }),
+            };
+          }
+
+          throw new Error(`unexpected url: ${url}`);
+        },
+        logID: 'log_debug_auth_001',
+        isNeedPayPack: false,
+        hasQuota: true,
+      }
+    );
+
+    assert.equal(debugResult.code, FieldCode.Success);
+    assert.equal(receivedAuthorizationId, 'backend_debug_auth');
+    assert.equal(getDebugBackendAuthorizationId(), 'backend_debug_auth');
+  } finally {
+    delete process.env.FIELD_DEBUG_AUTH;
+  }
 
   console.log('plugin unit tests passed');
 }

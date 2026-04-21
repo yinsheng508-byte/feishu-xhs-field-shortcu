@@ -4,10 +4,10 @@
   "description": "Feishu Base field shortcut for Xiaohongshu publish QR",
   "main": "output/private/build/index.js",
   "scripts": {
-    "start": "block-basekit-cli start:field",
+    "start": "node ./scripts/start-with-debug-auth.js",
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "pack": "block-basekit-cli pack:field",
+    "pack": "node ./scripts/pack-with-readme.js",
     "dev": "ts-node --transpile-only src/index.ts",
     "unit": "node -r ts-node/register/transpile-only test/index.test.ts",
     "test": "npm run check && npm run unit"
